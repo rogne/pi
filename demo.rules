@@ -1,0 +1,170 @@
+import java.util.List
+
+var Timer timer = null
+var boolean sentTemperature = true
+
+
+/*
+ * This is a demo rule which simulates a real dimmer by reacting to increase/decrease commands 
+ * and posting an updated state on the bus 
+ */
+ 
+ 
+ 
+ 
+rule "Dimmed Light"
+	when
+		Item DimmedLight received command
+	then
+		var Number percent = 0
+		if(DimmedLight.state instanceof DecimalType) percent = DimmedLight.state as DecimalType 
+ 			
+		if(receivedCommand==INCREASE) percent = percent + 5
+		if(receivedCommand==DECREASE) percent = percent - 5
+
+		if(percent<0)   percent = 0
+		if(percent>100) percent = 100
+		postUpdate(DimmedLight, percent);
+
+end
+
+
+rule "Initiere Dør"
+ 	when
+ 		System started
+ 	then
+ 		sendCommand(Utg, CLOSED)
+	end
+
+
+
+
+/*
+ * The following rules help initializing the demo items with some helpful states.
+ *
+ *rule "Initialize light states"
+ *	when
+ *		System started
+ *	then
+ *		Lights?.members.forEach(light|
+ *			postUpdate(light, if(Math::random > 0.7) ON else OFF)
+ *		)
+ *end
+*/
+
+/*rule "Initialize heating states"
+ *	when 
+ *		System started
+ *	then
+ *		Heating?.members.forEach(heating|
+ *			postUpdate(heating, if(Math::random > 0.8) ON else OFF)
+ *		)
+ *		postUpdate(Temperature_Setpoint, 22)
+ *end
+*/
+
+/*rule "Initialize contact states"
+ *	when 
+ *		System started
+ *	then
+ *		Windows?.members.forEach(window|
+ *			postUpdate(window, if(Math::random > 0.5) OPEN else CLOSED)
+ *		)
+ *end
+*/
+
+rule "Initialize Location"
+	when 
+		System started
+	then
+		DemoLocation.postUpdate(new PointType("59.740848,10.199179"))
+end
+
+/*rule "Set random room temperatures"
+*	when 
+*		System started or
+*		Time cron "0 0/5 * * * ?"
+*	then
+*		Temperature?.members.forEach(temperature|
+*			postUpdate(temperature, 20.0 + (25.0 - (Math::random * 50.0).intValue) / 10.0)
+*		)
+*end
+*/
+
+rule "Update max and min temperatures"
+when
+	Item Weather_Temperature changed or
+	Time cron "0 0 0 * * ?" or
+	System started
+then	
+	postUpdate(Weather_Temp_Max, Weather_Temperature.maximumSince(now.toDateMidnight).state)
+	postUpdate(Weather_Temp_Min, Weather_Temperature.minimumSince(now.toDateMidnight).state)
+	postUpdate(Weather_Temp_AMax, Weather_Temperature.maximumSince(parse("2016-01-17")).state)
+	postUpdate(Weather_Temp_AMin, Weather_Temperature.minimumSince(parse("2016-01-17")).state)
+end
+
+// Creates an item that stores the last update time of this item
+rule "Records last weather update time"
+when
+  Item Weather_Temperature received update
+then
+  postUpdate(Weather_LastUpdate, new DateTimeType())
+end
+
+
+/*rule "Test"
+*	when
+*		Item Scene_General received update
+*	then
+*		if (Scene_General.state==0)sendCommand(Color_1,10)
+*	end
+*
+*
+*
+*sendCommand(Komfyr, ON)
+*/
+
+
+rule "Modus"
+when
+	Item Temperatur_Ute changed 
+then	
+	if (sentTemperature && Temperatur_Ute.state < -12) {sendMail("espen.rogne@gmail.com", "Temperatur Varsle ", "Det er " + Temperatur_Ute.state + "°C i Drammen")}
+	if (Temperatur_Ute.state < 12) {sentTemperature = false} else {sentTemperature = true}
+		
+end
+
+
+rule "Dor"
+when
+	Item Utgang changed
+then
+	if (Utgang.state==OFF) {sendCommand(Utg, CLOSED)} else {sendCommand(Utg, OPEN}
+	if ((TV.state==0) && (now.getHourOfDay() >= 15) && (now.getHourOfDay() <23)) {sendCommand(gStue, ON)}
+	if (Armert.state==ON && Utgang.state==ON) {sendTelegram("bot1", "Dør i Drammen er åpnet")}
+end
+
+
+rule "Armert"
+when
+	Item Armert changed from OFF to ON
+then
+	sendTelegram("bot1", "Nu er alarm armert")
+ end
+ 
+rule "Fjernkontroll"
+when
+	Item FJ_1 received update
+then
+	if (FJ_1.state == ON) {sendCommand(Hue_stu, ON) else sendCommand(Hue_stu, OFF) }
+end	
+	
+ 
+//rule "Modus"
+//when
+//	Item Stue changed from OFF to ON
+//then	
+//	sendCommand(Komfyr, ON)
+//	sendMail("espen.rogne@gmail.com", "Test", "This is the message.")
+//end
+
